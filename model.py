@@ -4,19 +4,22 @@ from matplotlib import pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import Sequential
 from keras.layers import LSTM, Dropout, Dense
+import yfinance as yf
 
 
 class Investinator:
     def __init__(self, stock_name):
         self.stock_name = stock_name
         self.model = Sequential()
-        self.dataset = pd.read_csv(self.stock_name + ".csv")
+        self.dataset = None
         self.sc = MinMaxScaler(feature_range=(0, 1))
         self.X_train = None
         self.y_train = None
         pass
 
-    def prepare_dataset(self):
+    def prepare_dataset(self, period="1y"):
+        self.dataset = yf.download(self.stock_name, period=period, interval="1d")
+
         # Get training data
         training_set = self.dataset.iloc[:, 1:2].values
         training_set_scaled = self.sc.fit_transform(training_set)
@@ -24,15 +27,15 @@ class Investinator:
         # Prepare training data
         X_train = []
         y_train = []
-        for i in range(60, 1196):
+        for i in range(60, len(training_set_scaled)):
             X_train.append(training_set_scaled[i-60:i, 0])
             y_train.append(training_set_scaled[i, 0])
         X_train, y_train = np.array(X_train), np.array(y_train)
         X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
         self.X_train, self.y_train = X_train, y_train
 
-    def train(self, model=None):
-        self.prepare_dataset()
+    def train(self, model=None, period="1y"):
+        self.prepare_dataset(period=period)
 
         # Initialize model
         if model:
@@ -53,7 +56,7 @@ class Investinator:
         self.model.fit(self.X_train, self.y_train, epochs=100, batch_size=32)
 
     def predict(self):
-        test_dataset = pd.read_csv(self.stock_name + "_test.csv")
+        test_dataset = yf.download(self.stock_name, period="60d", interval="1d")
 
         real_stock_price = test_dataset.iloc[:, 1:2].values
         dataset_total = pd.concat((self.dataset['Open'], test_dataset['Open']), axis=0)
