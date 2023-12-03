@@ -15,28 +15,29 @@ class Investinator:
         self.sc = MinMaxScaler(feature_range=(0, 1))
         self.X_train = None
         self.y_train = None
+        self.test_period = None
         pass
 
-    def prepare_dataset(self, period="1y"):
+    def prepare_dataset(self, period="1y", test_period="60d"):
         self.dataset = yf.download(self.stock_name, period=period, interval="1d")
 
         # Get training data
-        training_set = self.dataset.iloc[:, 1:2].values
+        training_set = self.dataset.iloc[:, 1:2].values[0:-int(test_period[:-1])]
         training_set_scaled = self.sc.fit_transform(training_set)
 
         # Prepare training data
         X_train = []
         y_train = []
         for i in range(60, len(training_set_scaled)):
-            X_train.append(training_set_scaled[i-60:i, 0])
+            X_train.append(training_set_scaled[i - 60:i, 0])
             y_train.append(training_set_scaled[i, 0])
         X_train, y_train = np.array(X_train), np.array(y_train)
         X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
         self.X_train, self.y_train = X_train, y_train
 
-    def train(self, model=None, period="1y"):
-        self.prepare_dataset(period=period)
-
+    def train(self, model=None, period="1y", test_period="60d"):
+        self.prepare_dataset(period=period, test_period=test_period)
+        self.test_period = test_period
         # Initialize model
         if model:
             self.model = model
@@ -56,16 +57,16 @@ class Investinator:
         self.model.fit(self.X_train, self.y_train, epochs=100, batch_size=32)
 
     def predict(self):
-        test_dataset = yf.download(self.stock_name, period="60d", interval="1d")
+        test_dataset = yf.download(self.stock_name, period=self.test_period, interval="1d")
 
         real_stock_price = test_dataset.iloc[:, 1:2].values
         dataset_total = pd.concat((self.dataset['Open'], test_dataset['Open']), axis=0)
-        inputs = dataset_total[len(dataset_total)-len(test_dataset)-60:].values
+        inputs = dataset_total[len(dataset_total) - len(test_dataset) - 60:].values
         inputs = inputs.reshape(-1, 1)
         inputs = self.sc.transform(inputs)
         X_test = []
-        for i in range(60, 120):
-            X_test.append(inputs[i-60:i, 0])
+        for i in range(60, 60 + len(test_dataset)):
+            X_test.append(inputs[i - 60:i, 0])
         X_test = np.array(X_test)
         X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
         predicted_stock_price = self.model.predict(X_test)
